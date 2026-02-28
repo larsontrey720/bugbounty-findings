@@ -1,47 +1,69 @@
 # Bug Bounty Methodology
 
-## Attack Vectors
+## 1. S3 Bucket Enumeration
 
-### 1. EngineX 403 Bypass
-Double URL-encoded path traversal bypass
-
-### 2. Hardcoded Credentials
-Check docs and JS files for credentials
-
-### 3. Numeric IDOR
-Check numeric user IDs for access control issues
-
-### 4. Blind XSS
-Check all user input points including internal panels
-
-### 5. SQL Injection via Protobuf
-Binary format: param name + null byte + value length + value
-
-### 6. GraphQL Security Testing
-- Introspection - Get full schema with __schema query
-- Batch attacks - Multiple queries in one request
-- Deep recursion - DoS via nested queries
-- Field suggestions - Schema leakage (leaks valid fields)
-- Alias flooding - Rate limit bypass
-- @include/@skip - Directive manipulation
-- Query complexity - DoS via nested depth
-
-Tools: GraphQL Voyager, InQL, graphql-path-enum
-
-### 7. S3 Bucket Enumeration
-
-Classic:
+**Classic Check:**
 ```bash
 aws s3 ls s3://target-bucket-name --no-sign-request
 ```
 
-Permutation script:
-```bash
-for word in $(cat buckets.txt); do
-  aws s3api list-objects-v2 --bucket $word-target --no-sign-request 2>/dev/null && echo "HIT: $word-target"
-done
+**Permutation Attack:**
+Loop through common bucket names:
+- target-static
+- target-assets
+- target-uploads
+- target-logs
+- target-backup-2026
+- target-prod
+- target-dev
+
+**Key Misconfigurations:**
+- Public ACL + ListBucket + GetObject = free data exfil
+- Write access = upload malicious files
+
+**Tools:**
+- lazys3
+- s3scanner
+- AWS CLI
+
+---
+
+## 2. Race Condition Exploitation
+
+**What to test:**
+- Create account twice → negative balance
+- Apply coupon + checkout simultaneously
+- Password reset + change email race
+- 2FA disable + login race
+- Wallet balance overflow
+- Time-of-check to time-of-use (TOCTOU)
+
+**Python + asyncio example:**
+```python
+import asyncio, httpx
+
+async def race():
+    async with httpx.AsyncClient() as c:
+        tasks = [c.post(url, data=payload) for _ in range(50)]
+        return await asyncio.gather(*tasks, return_exceptions=True)
+
+asyncio.run(race())
 ```
 
-Common bucket names: target-static, target-assets, target-uploads, target-logs, target-backup-2026
+**Pro Tools:**
+- racepwn (my fork of turbo-intruder)
+- Turbo Intruder with 0.01s delay clusters
+- Python asyncio + httpx for custom races
 
-Misconfig gold: Public ACL + ListBucket + GetObject = free data exfil
+**Billion Dollar Bug Pattern:**
+Multiple requests hitting payment/balance endpoints simultaneously can bypass:
+- Rate limiting
+- Validation logic
+- Balance checks
+
+**Key targets:**
+- Financial transactions
+- Coupon/stripe usage
+- Account creation limits
+- OTP verification
+- Session management
